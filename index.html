@@ -1,0 +1,1900 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Messaging Study</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<style>
+/* Layout: one phone-width column. The chat screen is pinned to the visible part of
+   the screen, so the on-screen keyboard never covers the message box. */
+:root{
+  --bg:#e8ecf0;          /* behind everything */
+  --chat:#eef1f4;        /* chat background */
+  --surface:#ffffff;     /* header, message box, cards */
+  --surface-2:#f2f4f7;   /* inputs, secondary buttons */
+  --line:#d6dce3;
+  --fg:#16202a;
+  --muted:#5b6774;
+  --accent:#2b6380;      /* participant's bubbles, main buttons */
+  --accent-fg:#ffffff;
+  --recv:#ffffff;        /* contact's bubbles */
+  --recv-fg:#16202a;
+  --chip:#dce2e9;
+  --danger:#b3261e;
+  --test-bg:#ffe08a;
+  --test-fg:#3a2c00;
+  --scrim:rgba(14,22,30,.45);
+  --shadow:0 1px 1.5px rgba(16,32,48,.12);
+  /* lock screen: a fixed dark "wallpaper" in both themes, like a real phone */
+  --lock-bg:#17212a;
+  --lock-bg-2:#2a3b49;
+  --lock-fg:#f2f5f8;
+  --lock-btn:rgba(255,255,255,.12);
+  --lock-line:rgba(255,255,255,.24);
+  --notif-bg:rgba(250,251,252,.94);
+  --notif-fg:#16202a;
+  --notif-muted:#5b6774;
+  --font:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --gl:max(16px, env(safe-area-inset-left, 0px));
+  --gr:max(16px, env(safe-area-inset-right, 0px));
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1217; --chat:#10161c; --surface:#172029; --surface-2:#1f2a34; --line:#293641;
+    --fg:#e4eaf0; --muted:#94a2b0; --accent:#2f7598; --accent-fg:#ffffff;
+    --recv:#1e2832; --recv-fg:#e4eaf0; --chip:#24303b; --danger:#ff8a80;
+    --test-bg:#4d3b00; --test-fg:#ffe7a3; --scrim:rgba(0,0,0,.6); --shadow:none;
+    --notif-bg:rgba(38,49,59,.95); --notif-fg:#e4eaf0; --notif-muted:#a3b0bc;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1217; --chat:#10161c; --surface:#172029; --surface-2:#1f2a34; --line:#293641;
+  --fg:#e4eaf0; --muted:#94a2b0; --accent:#2f7598; --accent-fg:#ffffff;
+  --recv:#1e2832; --recv-fg:#e4eaf0; --chip:#24303b; --danger:#ff8a80;
+  --test-bg:#4d3b00; --test-fg:#ffe7a3; --scrim:rgba(0,0,0,.6); --shadow:none;
+  --notif-bg:rgba(38,49,59,.95); --notif-fg:#e4eaf0; --notif-muted:#a3b0bc;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:16px;line-height:1.4;
+  -webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+#app{position:fixed;left:0;right:0;top:var(--vv-top,0px);height:var(--vv-h,100%);max-width:560px;margin:0 auto;
+  display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+@media (min-width:600px){#app{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
+#screen{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+
+/* ---------- test-mode bar ---------- */
+.testbar{display:flex;align-items:center;gap:10px;background:var(--test-bg);color:var(--test-fg);
+  font-size:12px;font-weight:600;line-height:1.3;
+  padding-block:calc(6px + env(safe-area-inset-top,0px)) 6px;padding-left:var(--gl);padding-right:var(--gr)}
+.testinfo{flex:1;min-width:0;overflow-wrap:anywhere}
+.testskip{border:1px solid currentColor;background:transparent;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600}
+
+/* ---------- ordinary pages ---------- */
+.page{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding-block:calc(28px + env(safe-area-inset-top,0px)) calc(32px + env(safe-area-inset-bottom,0px));
+  padding-left:var(--gl);padding-right:var(--gr)}
+.testbar + #screen .page{padding-top:28px}
+.page-inner{max-width:30rem;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.page.centered .page-inner{min-height:100%;justify-content:center}
+h1{font-size:1.375rem;line-height:1.25;margin:0;font-weight:700;text-wrap:balance}
+h2{font-size:1rem;line-height:1.3;margin:10px 0 0;font-weight:700}
+p{margin:0;line-height:1.5}
+.prose{display:flex;flex-direction:column;gap:12px}
+.muted{color:var(--muted)}
+.small{font-size:.875rem}
+.eyebrow{font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:16px}
+.note{border-left:3px solid var(--accent);background:var(--surface);padding:12px 14px;border-radius:0 10px 10px 0}
+.context-text{font-size:1.2rem;line-height:1.45}
+.receipt-box{display:flex;gap:12px;align-items:flex-start;border-top:1px solid var(--line);padding-top:16px}
+.receipt-box svg{flex:none;margin-top:2px;color:var(--accent)}
+.receipt-title{font-weight:700}
+.btn{appearance:none;border:0;border-radius:12px;min-height:50px;padding:0 20px;font-weight:600;
+  background:var(--accent);color:var(--accent-fg)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.secondary{background:var(--surface-2);color:var(--fg);border:1px solid var(--line)}
+.q{display:flex;flex-direction:column;gap:8px}
+.q-label{font-weight:600;line-height:1.4}
+.field-label{font-size:.875rem;font-weight:600}
+.text-input{width:100%;min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);
+  color:var(--fg);font:inherit;font-size:16px;padding:10px 12px}
+textarea.text-input{min-height:88px;resize:vertical}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1 1 0;min-width:5.5rem;min-height:44px;border-radius:10px;border:1px solid var(--line);
+  background:var(--surface-2);font-size:.9375rem;padding:6px 10px;line-height:1.25}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.check{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);cursor:pointer}
+.check input{flex:none;width:22px;height:22px;margin:1px 0 0;accent-color:var(--accent)}
+.passing{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding-block:28px}
+.passing .big{font-size:1.125rem;font-weight:600}
+.code-box{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.code{font-family:var(--mono);font-size:1.5rem;font-weight:700;letter-spacing:.06em;user-select:all;-webkit-user-select:all}
+.coach{background:var(--surface);color:var(--fg);border:1px solid var(--accent);border-radius:12px;
+  padding:10px 12px;font-size:14px;line-height:1.4}
+.chat .coach{margin:0 var(--gr) 8px var(--gl)}
+
+/* ---------- lock screen ---------- */
+.lock{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:24px;color:var(--lock-fg);
+  background:radial-gradient(140% 90% at 50% 0%, var(--lock-bg-2), var(--lock-bg) 70%);
+  padding-block:calc(44px + env(safe-area-inset-top,0px)) calc(20px + env(safe-area-inset-bottom,0px));
+  padding-left:var(--gl);padding-right:var(--gr)}
+.testbar + #screen .lock{padding-top:44px}
+.lock-top{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.lock-date{font-size:1rem;font-weight:500;opacity:.88;min-height:1.4em}
+.lock-clock{font-size:4rem;font-weight:300;letter-spacing:-.02em;line-height:1.05;font-variant-numeric:tabular-nums}
+.lock-step{font-size:.875rem;opacity:.75;min-height:1.3em;margin-top:4px}
+.lock-notifs{flex:1;display:flex;flex-direction:column;gap:8px}
+.notif{appearance:none;border:0;width:100%;text-align:left;background:var(--notif-bg);color:var(--notif-fg);
+  border-radius:18px;padding:12px 14px 13px;display:flex;flex-direction:column;gap:3px;
+  box-shadow:0 6px 18px rgba(0,0,0,.25);animation:drop .35s ease-out}
+.notif-head{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--notif-muted)}
+.app-icon{width:18px;height:18px;border-radius:5px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center}
+.notif-ago{margin-left:auto;font-variant-numeric:tabular-nums}
+.notif-name{font-weight:700;font-size:15px;margin-top:2px}
+.notif-line{font-size:15px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif-count{font-size:13px;color:var(--notif-muted);font-variant-numeric:tabular-nums}
+.lock-actions{display:flex;gap:10px}
+.lock .act{background:var(--lock-btn);color:var(--lock-fg);border-color:var(--lock-line)}
+@keyframes drop{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- chat screen ---------- */
+.chat{flex:1;min-height:0;display:flex;flex-direction:column;position:relative;background:var(--chat)}
+.chat-head{display:flex;align-items:center;gap:12px;background:var(--surface);border-bottom:1px solid var(--line);
+  padding-block:calc(10px + env(safe-area-inset-top,0px)) 10px;padding-left:var(--gl);padding-right:var(--gr)}
+.testbar + #screen .chat-head{padding-top:10px}
+.avatar{flex:none;width:40px;height:40px;border-radius:50%;background:var(--chip);color:var(--muted);
+  display:grid;place-items:center;font-weight:700;font-size:17px}
+.head-name{flex:1;min-width:0;font-weight:600;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head-clock{flex:none;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.chat-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.chat-list{display:flex;flex-direction:column;justify-content:flex-end;min-height:100%;gap:3px;
+  padding-block:12px 10px;padding-left:var(--gl);padding-right:var(--gr)}
+.row{display:flex}
+.row.first{margin-top:8px}
+.row.me{justify-content:flex-end}
+.bubble{max-width:80%;padding:7px 12px 5px;border-radius:18px;line-height:1.35;font-size:16px;
+  white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:var(--shadow);
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:transform .15s ease}
+.row.me .bubble{background:var(--accent);color:var(--accent-fg);border-bottom-right-radius:6px}
+.row.them .bubble{background:var(--recv);color:var(--recv-fg);border-bottom-left-radius:6px}
+.bubble .t{display:block;text-align:right;font-size:11px;opacity:.72;margin-top:1px;font-variant-numeric:tabular-nums}
+.row.me .bubble.pressing{transform:scale(.96)}
+.row.me .bubble.deleted{background:transparent;color:var(--muted);border:1px dashed var(--line);box-shadow:none;font-style:italic}
+.bubble.deleted svg{vertical-align:-2px;margin-right:4px}
+.status{align-self:flex-end;font-size:12px;color:var(--muted);padding:1px 4px 2px}
+.chip-row{display:flex;justify-content:center;margin:12px 0 6px}
+.chip{background:var(--chip);color:var(--muted);font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;
+  font-variant-numeric:tabular-nums;text-align:center}
+.notice{display:flex;gap:6px;align-items:flex-start;max-width:88%;background:var(--chip);color:var(--muted);
+  font-size:12.5px;line-height:1.4;padding:6px 12px;border-radius:10px;text-align:left}
+.notice svg{flex:none;margin-top:1px}
+
+.actions{display:flex;gap:10px;background:var(--surface);border-top:1px solid var(--line);
+  padding-block:10px 0;padding-left:var(--gl);padding-right:var(--gr)}
+.act{flex:1 1 0;min-height:44px;border-radius:22px;border:1px solid var(--line);background:var(--surface-2);
+  font-size:15px;font-weight:600}
+.act:disabled{opacity:.45;cursor:default}
+.composer{display:flex;align-items:flex-end;gap:8px;background:var(--surface);
+  padding-block:8px calc(8px + env(safe-area-inset-bottom,0px));padding-left:var(--gl);padding-right:var(--gr)}
+.kb-open .composer{padding-bottom:8px}
+.input{flex:1;min-width:0;min-height:44px;max-height:132px;resize:none;border:1px solid var(--line);border-radius:22px;
+  background:var(--surface-2);color:var(--fg);font:inherit;font-size:16px;line-height:1.35;padding:10px 15px;overflow-y:auto}
+.input:focus-visible{outline:none;border-color:var(--accent)}
+.send{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-fg);
+  display:grid;place-items:center}
+.send:disabled{background:var(--chip);color:var(--muted);cursor:default}
+
+.timejump{position:absolute;inset:0;z-index:5;background:var(--scrim);display:grid;place-items:center;padding:24px}
+.tj-card{background:var(--surface);border-radius:16px;padding:20px 32px;text-align:center;min-width:13rem}
+.tj-clock{font-size:2.125rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.15}
+.tj-label{color:var(--muted);font-size:.9375rem;margin-top:4px}
+
+.sheet-scrim{position:absolute;inset:0;z-index:10;background:var(--scrim);display:flex;align-items:flex-end}
+.sheet{width:100%;background:var(--surface);border-radius:16px 16px 0 0;display:flex;flex-direction:column;gap:10px;
+  padding-block:16px calc(16px + env(safe-area-inset-bottom,0px));padding-left:var(--gl);padding-right:var(--gr)}
+.sheet-preview{font-size:14px;color:var(--muted);max-height:4.4em;overflow:hidden;padding:0 4px 4px}
+.sheet-btn{min-height:50px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:600;font-size:16px}
+.sheet-btn.danger{color:var(--danger)}
+
+/* ---------- rating sliders ---------- */
+.track{height:48px;padding:0 15px;touch-action:pan-y;cursor:pointer;border-radius:10px}
+.rail{position:relative;height:100%}
+.rail::before{content:"";position:absolute;left:0;right:0;top:50%;height:6px;margin-top:-3px;border-radius:3px;background:var(--chip)}
+.rail::after{content:"";position:absolute;left:-1px;right:-1px;top:50%;height:16px;margin-top:-8px;
+  border-left:2px solid var(--line);border-right:2px solid var(--line)}
+.thumb{position:absolute;top:50%;left:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;
+  background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.track.untouched .thumb{display:none}
+.ends{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--muted)}
+
+/* ---------- data tables (test mode) ---------- */
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;font-family:var(--mono);font-size:12px;min-width:100%}
+th,td{padding:6px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
+th{color:var(--muted);font-weight:600}
+td.wrap{white-space:pre-wrap;min-width:16rem}
+tr:last-child th,tr:last-child td{border-bottom:0}
+
+@media (prefers-reduced-motion: reduce){
+  .bubble{transition:none}
+  .notif{animation:none}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<noscript>This study needs JavaScript. Please turn it on and reload the page.</noscript>
+<script>
+"use strict";
+/* ##########################################################################
+   ✏️  STUDY SETTINGS — YOUR TEAM EDITS THIS BLOCK ONLY
+   --------------------------------------------------------------------------
+   • Change any text inside "double quotes".
+   • Keep the commas, colons, brackets [ ] and braces { } exactly where they are.
+   • {contact} is replaced by the contact's name (or the participant's nickname).
+   • {relationship} is replaced by the closeness wording below.
+   • If you break something, the page shows a message saying what's wrong.
+   ########################################################################## */
+const CONFIG = {
+
+  /* ---------------- 0. Connection to your Google Sheet ---------------- */
+  data: {
+    // Paste the "Web app URL" from Apps Script here (it ends in /exec). Keep the quotes.
+    endpoint: "https://script.google.com/macros/s/AKfycbx7h8eylXan9-bmpBKwE6UAtGxnEWX2LuyomUKIntMuJzird-WhbJvIMVtE_NgrPF7k/exec",
+    // Must be exactly the same as STUDY_KEY in the Apps Script. Blocks random junk
+    // submissions. It is not a password: anyone who reads the page source can see it.
+    key: "river-saffron-a47ebc16"
+  },
+
+  /* ---------------- 1. Consent ---------------- */
+  consent: {
+    title: "Messaging study",
+    // PLACEHOLDER: replace with your approved consent text (one "..." per paragraph).
+    paragraphs: [
+      "[PLACEHOLDER — consent text goes here: who is running the study, what participants will do, how long it takes, that taking part is voluntary, how data is stored, and who to contact.]",
+      "[PLACEHOLDER — second paragraph if needed.]"
+    ],
+    // REQUIRED: tells participants their typing is recorded. Edit the wording, but keep it.
+    recordingNotice: "This study records everything you type in the chats, including text you delete before sending, and how long you take. Please don't type real names, phone numbers or other personal details.",
+    checkbox: "I have read the information above and agree to take part.",
+    button: "Continue"
+  },
+
+  /* ---------------- 2. Eligibility ---------------- */
+  eligibility: {
+    title: "Before we start",
+    questions: [
+      { id: "undergrad", question: "Are you currently enrolled as an undergraduate student?" },
+      { id: "adult",     question: "Are you 18 or older?" }
+    ],
+    yes: "Yes",
+    no: "No",
+    ineligibleTitle: "Thank you for your interest",
+    ineligibleText: "This study is only open to undergraduate students aged 18 or older. Nothing you entered has been saved. You can close this page."
+  },
+
+  /* ---------------- 3. Nicknames (optional) ---------------- */
+  askForNicknames: true,   // set to false to skip this screen
+  nicknames: {
+    title: "Think of real people (optional)",
+    intro: "In the chats you'll get messages from a close friend, an acquaintance, and someone you recently started talking to. If you like, think of a real person for each and type a nickname. It will be shown as their name in the chats.",
+    privacy: "Nicknames stay on your phone. They are never saved or sent to the researchers.",
+    labels: {
+      close:        "A close friend",
+      acquaintance: "An acquaintance",
+      new:          "Someone you recently started talking to"
+    },
+    placeholder: "Nickname (optional)",
+    button: "Continue"
+  },
+
+  /* ---------------- 4. Instructions ---------------- */
+  instructions: {
+    title: "How it works",
+    paragraphs: [
+      "You'll go through 6 short chats. Each one is a separate situation.",
+      "Before each chat you'll see who is texting you and whether your read receipts are on. Read receipts on means the other person can see when you've opened and read their message.",
+      "Messages arrive on your lock screen. You can open the chat, or tap Wait to let time pass.",
+      "Reply however you normally would, or not at all. When you're done, tap Leave chat.",
+      "After each chat there are a few quick questions. First, a practice chat."
+    ],
+    button: "Start the practice chat"
+  },
+
+  /* ---------------- 5. Practice chat ---------------- */
+  practice: {
+    contactName: "Sam",
+    context: "This is a practice chat. {contact} is a classmate.",
+    weekday: "Tuesday",
+    arrivalTime: "5:30 pm",
+    message: "hey, did you get the timetable for next week?",
+    receiptTitle: "Read receipts",
+    receiptDetail: "In the real chats, this box tells you whether your read receipts are on or off.",
+    receiptNotice: "In the real chats, this note reminds you whether your read receipts are on or off.",
+    coachLock: "Practice: this is how messages arrive. Try Wait once to let time pass, then open the chat.",
+    coachChat: "Practice: type a reply and send it. To delete a message you sent, press and hold it. Tap Leave chat when you're done.",
+    doneTitle: "Practice done",
+    doneText: "Now the 6 real chats. Each one is a separate situation. Reply as you normally would.",
+    doneButton: "Start"
+  },
+
+  /* ---------------- 6. Words used in the chats ---------------- */
+  labels: {
+    appName:            "Messages",
+    wait:               "Wait",
+    openChat:           "Open the chat",
+    leaveUnopened:      "Leave it unopened",
+    leave:              "Leave chat",
+    composerPlaceholder:"Message",
+    delivered:          "Delivered",
+    deleted:            "This message was deleted",
+    deleteForEveryone:  "Delete for everyone",
+    cancel:             "Cancel",
+    timePasses:         "Time passes…",
+    chatClosed:         "Chat closed.",
+    today:              "Today",
+    yesterday:          "Yesterday",
+    chatOf:             "Chat {n} of {total}",
+    messagesCount:      "{n} messages",
+    contextButton:      "Continue",
+    ratingsTitle:       "A few quick questions about that chat",
+    ratingsHelp:        "Tap anywhere on each line, then drag to adjust.",
+    continueBtn:        "Continue"
+  },
+
+  // What participants are told about their own read receipts.
+  //  title + detail: on the card before the chat.  notice: small note at the top of the chat.
+  receipts: {
+    on: {
+      title:  "Your read receipts are ON",
+      detail: "When you open a chat, {contact} can see that you've read their messages.",
+      notice: "Read receipts are on. {contact} can see when you've read messages."
+    },
+    off: {
+      title:  "Your read receipts are OFF",
+      detail: "{contact} can't see whether you've read their messages.",
+      notice: "Read receipts are off. {contact} can't see when you've read messages."
+    }
+  },
+
+  // How each closeness level is described ({relationship}).
+  closenessLabels: {
+    close:        "a close friend",
+    acquaintance: "an acquaintance",
+    new:          "someone you recently started talking to"
+  },
+
+  // Points in time the participant can "Wait" through, counted from when the
+  // contact's message ARRIVES. The last one can use nextMorningAt (24-hour clock).
+  timeSteps: [
+    { label: "Just arrived",     minutesAfterArrival: 0   },
+    { label: "5 minutes later",  minutesAfterArrival: 5   },
+    { label: "30 minutes later", minutesAfterArrival: 30  },
+    { label: "2 hours later",    minutesAfterArrival: 120 },
+    { label: "Next morning",     nextMorningAt: "9:10"    }
+  ],
+
+  secondsPerTimeJump: 1.6,            // length of the "time passes" animation
+  secondsBetweenBurstMessages: 0.9,   // gap between burst messages arriving
+
+  // The lock-screen notification shows only the START of the first message, cut off
+  // with "…", so participants have to open the chat to read it. It's the same length
+  // in every format; a burst also shows "5 messages". Roughly this many characters:
+  notificationPreviewChars: 20,
+
+  /* ---------------- 7. Questions after each chat ---------------- */
+  // Sliders run 0–100 with no starting position.
+  // onlyIfOpened / onlyIfReplied: skip the question when it doesn't apply.
+  ratings: [
+    { id: "pressure_notification", question: "When you saw the notification, how much pressure did you feel to reply quickly?", left: "None", right: "A lot" },
+    { id: "pressure_after_open",   question: "After you opened the chat, how much pressure did you feel to reply quickly?",   left: "None", right: "A lot", onlyIfOpened: true },
+    { id: "interest",              question: "How interested were you in this conversation?",                               left: "Not at all", right: "Very" },
+    { id: "effort",                question: "How much effort did you put into your reply?",                                 left: "None", right: "A lot", onlyIfReplied: true }
+  ],
+  receiptCheck: {
+    question: "Could {contact} see when you had read their message?",
+    options:  ["Yes", "No", "Not sure"]
+  },
+
+  /* ---------------- 8. The 6 scenarios ---------------- */
+  //  Exactly 2 per closeness level ("close", "acquaintance", "new"):
+  //  one with topicType "plans" and one with topicType "favour".
+  //  context:     the situation (don't reveal what the contact will say)
+  //  weekday:     day shown on the lock screen
+  //  arrivalTime: when the contact's message arrives
+  //  short:       ONE short message
+  //  burst:       5 short messages, sent one after another
+  //  The LONG version is built automatically by joining the burst messages into one
+  //  paragraph, so it always has the same words. To make it longer, add a burst message.
+  //  RULES:
+  //   • Put the one question or request in the FIRST burst message. Nothing else asks anything.
+  //   • Start the short message with the same words as the first burst message, so the
+  //     lock-screen preview is identical in every format (the page checks this).
+  //   • Use the same tone markers (!, emoji, "heyyy") in the short and burst versions.
+  //  PLACEHOLDERS: your team will rewrite these.
+  scenarios: [
+    {
+      id: "S1", closeness: "close", topicType: "plans",
+      contactName: "Raju",
+      context: "{contact} is {relationship}. It's Wednesday evening and you're back in your room after classes.",
+      weekday: "Wednesday", arrivalTime: "7:42 pm",
+      short: "heyyy! free for dinner on friday? 😋",
+      burst: [
+        "heyyy! free for dinner on friday?",
+        "that new momo place near the metro finally opened, the one we kept walking past every day after class",
+        "my roommate went yesterday and says the chilli momos are unreal and the portions are huge",
+        "it's not even expensive, like 150 for a full plate",
+        "we could go around 8 after your lab gets over 😋"
+      ]
+    },
+    {
+      id: "S2", closeness: "close", topicType: "favour",
+      contactName: "Ananya",
+      context: "{contact} is {relationship}. It's Sunday afternoon and you're doing laundry in the hostel.",
+      weekday: "Sunday", arrivalTime: "3:15 pm",
+      short: "heyy can I borrow your calculator for tomorrow's exam? 🙏",
+      burst: [
+        "heyy can I borrow your calculator for tomorrow's exam?",
+        "mine just died in the middle of practice and I can't find spare batteries anywhere",
+        "the stationery shop near the gate is shut on sundays and the one in the market is too far",
+        "I already asked two people on my floor but they need theirs",
+        "I'll give it back right after the paper, promise 🙏"
+      ]
+    },
+    {
+      id: "S3", closeness: "acquaintance", topicType: "plans",
+      contactName: "Kabir",
+      context: "{contact} is {relationship} from your elective class. It's Tuesday evening and you're at the canteen.",
+      weekday: "Tuesday", arrivalTime: "6:20 pm",
+      short: "hey! want to join our team for the fest quiz on saturday? 😄",
+      burst: [
+        "hey! want to join our team for the fest quiz on saturday?",
+        "we're three people right now and need one more to register",
+        "most of us are good with science and current affairs but nobody knows films or cricket",
+        "someone in class said you're really good at both",
+        "it's only two hours in the afternoon and there's free food after 😄"
+      ]
+    },
+    {
+      id: "S4", closeness: "acquaintance", topicType: "favour",
+      contactName: "Sneha",
+      context: "{contact} is {relationship} from your lab batch. It's Thursday evening and you're in your room.",
+      weekday: "Thursday", arrivalTime: "8:15 pm",
+      short: "hi, could you send me today's lab readings? 😅",
+      burst: [
+        "hi, could you send me today's lab readings?",
+        "sorry for texting so randomly",
+        "my sheet got wet on the way back because of the rain and half the numbers are gone",
+        "the record has to be submitted on monday and sir is strict about the readings matching",
+        "even a photo of your page would really help 😅"
+      ]
+    },
+    {
+      id: "S5", closeness: "new", topicType: "plans",
+      contactName: "Meher",
+      context: "{contact} is {relationship}. You met at a club orientation last week. It's Saturday morning.",
+      weekday: "Saturday", arrivalTime: "11:20 am",
+      short: "hiii! want to come to the open mic at the café tonight? 🎤",
+      burst: [
+        "hiii! want to come to the open mic at the café tonight?",
+        "a few of us from the club are going, it starts at 7",
+        "it's the small place behind the library with the fairy lights",
+        "people do poetry, stand-up and some music, and you can just watch if you don't want to perform",
+        "it'd be nice to actually hang out properly 🎤"
+      ]
+    },
+    {
+      id: "S6", closeness: "new", topicType: "favour",
+      contactName: "Arjun",
+      context: "{contact} is {relationship}. You started chatting after a group project meeting. It's Monday evening.",
+      weekday: "Monday", arrivalTime: "6:50 pm",
+      short: "hey, could you share that presentation template you showed us? haha",
+      burst: [
+        "hey, could you share that presentation template you showed us?",
+        "it's me from the project meeting on friday btw",
+        "ours looks so boring next to it and our review is on wednesday",
+        "I'll change the colours and fonts so it doesn't look like we just copied yours",
+        "no worries if you'd rather not share it haha"
+      ]
+    }
+  ],
+
+  /* ---------------- 9. End questions ---------------- */
+  endQuestions: {
+    title: "Almost done",
+    year:        { question: "Which year of study are you in?",                         options: ["1st", "2nd", "3rd", "4th", "5th or later"] },
+    app:         { question: "Which messaging app do you use most?",                    options: ["WhatsApp", "Instagram", "Telegram", "Snapchat", "Other"] },
+    ownReceipts: { question: "Do you keep read receipts on in your own messaging app?", options: ["On", "Off", "Different in different apps", "Not sure"] },
+    guess:       { question: "What do you think this study was testing?",               placeholder: "Optional" },
+    realism:     { question: "How realistic did these chats feel?",                     left: "Not at all", right: "Very realistic" },
+    button: "Finish"
+  },
+
+  /* ---------------- 10. Debrief ---------------- */
+  debrief: {
+    title: "Thank you",
+    // PLACEHOLDER: replace with your approved debrief text.
+    paragraphs: [
+      "[PLACEHOLDER — debrief text goes here: what the study was really about, why some details were not explained at the start, and who to contact with questions or concerns.]"
+    ],
+    codeLabel: "Your participant code",
+    codeHelp: "Write this down or take a screenshot. If you want your data removed later, email [RESEARCH TEAM EMAIL] with this code within [NUMBER] weeks.",
+    copy: "Copy code",
+    copied: "Copied",
+    saving: "Saving your answers…",
+    saved: "All your answers are saved. You can close this page.",
+    notSaved: "Your answers aren't saved yet. Please keep this page open and check your internet connection. We'll keep trying.",
+    retry: "Try again"
+  },
+
+  /* ---------------- 11. Coming back after the page closed ---------------- */
+  resume: {
+    title: "Welcome back",
+    text: "You can carry on where you left off.",
+    skippedChat: "The chat you were in when the page closed will be skipped.",
+    nicknameText: "Nicknames are never stored, so please type them again if you'd like them used (optional).",
+    button: "Continue"
+  },
+  alreadyDone: {
+    title: "You've already taken part",
+    text: "Thank you. Each person can take part only once."
+  }
+};
+/* ##########################################################################
+   END OF STUDY SETTINGS — nothing below needs editing.
+   ########################################################################## */
+
+
+/* ======================= basic helpers ======================= */
+// Test mode: add ?test=1 to the link (or #test). Nothing is sent to the Sheet.
+//   ?test=1&send=1 (or #test-send): test mode that DOES send, into separate TEST_ tabs,
+//   so you can check the connection without touching the real data.
+//   ?list=5 (or #test-list5): force counterbalancing list 5.
+const QS = new URLSearchParams(location.search);
+const HASH = location.hash.replace(/^#/, "");
+const TEST = QS.get("test") === "1" || /(^|-)test($|-)/.test(HASH);
+const TEST_SEND = TEST && (QS.get("send") === "1" || /(^|-)send($|-)/.test(HASH));
+const SENDING = !TEST || TEST_SEND;
+const ENDPOINT_SET = /^https:\/\/script\.google(usercontent)?\.com\//.test(CONFIG.data.endpoint);
+const FORCED_LIST = (() => {
+  const n = parseInt(QS.get("list") || (HASH.match(/(?:^|-)list(\d+)/) || [])[1], 10);
+  return n >= 1 && n <= 12 ? n : null;
+})();
+const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const COARSE_POINTER = matchMedia("(pointer: coarse)").matches;
+const FORMATS = ["short", "burst", "long"];
+const LEVELS = ["close", "acquaintance", "new"];
+
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  if (props) for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+function svg(markup) { const s = h("span", { "aria-hidden": "true" }); s.innerHTML = markup; return s.firstChild; }
+const ICON_SEND = '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6 3.3 10l12.5 2-12.5 2z"/></svg>';
+const ICON_BLOCKED = '<svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5.7 5.7l12.6 12.6" stroke="currentColor" stroke-width="2"/></svg>';
+const ICON_CHAT = '<svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>';
+const ICON_EYE = '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="2" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>';
+const ICON_EYE_OFF = '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="2" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="2"/></svg>';
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+const charLen = s => [...String(s)].length;
+const wordCount = s => (String(s).trim() ? String(s).trim().split(/\s+/).length : 0);
+const initial = name => ([...String(name).trim()][0] || "?").toUpperCase();
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function randInt(n) { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; }
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = randInt(i + 1); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+/* clock: times are minutes since midnight of the scenario's first day */
+function parseClock(s) {
+  const m = String(s).trim().toLowerCase().match(/^(\d{1,2})[:.](\d{2})\s*(am|pm)?$/);
+  if (!m) throw new Error("Can't read the time \"" + s + "\". Use a format like 7:42 pm or 19:42.");
+  let hh = +m[1]; const mm = +m[2];
+  if (m[3] === "pm" && hh < 12) hh += 12;
+  if (m[3] === "am" && hh === 12) hh = 0;
+  return hh * 60 + mm;
+}
+function fmtClock(abs) {
+  const d = ((abs % 1440) + 1440) % 1440;
+  let hh = Math.floor(d / 60); const mm = d % 60;
+  const ap = hh >= 12 ? "pm" : "am";
+  hh = hh % 12 || 12;
+  return hh + ":" + String(mm).padStart(2, "0") + " " + ap;
+}
+const dayOf = abs => Math.floor(abs / 1440);
+
+function buildSteps(arrivalAbs) {
+  let prev = -1;
+  return CONFIG.timeSteps.map((s, i) => {
+    const abs = s.nextMorningAt != null
+      ? (dayOf(arrivalAbs) + 1) * 1440 + parseClock(s.nextMorningAt)
+      : arrivalAbs + Number(s.minutesAfterArrival || 0);
+    if (abs < prev) throw new Error("Time step " + (i + 1) + " (\"" + s.label + "\") is earlier than the step before it.");
+    prev = abs;
+    return { index: i, label: s.label, abs };
+  });
+}
+
+// The contact's message(s) for this format.
+function incomingMessages(sc, format) {
+  if (format === "short") return [sc.short];
+  if (format === "burst") return sc.burst.slice();
+  return [sc.long || joinBurst(sc.burst)];
+}
+// Joins the burst into one message. Adds a full stop between parts that end in a letter/number.
+function joinBurst(parts) {
+  return parts.map((p, i) => {
+    p = String(p).trim();
+    if (i < parts.length - 1 && /[A-Za-z0-9À-ɏऀ-ॿ]$/.test(p)) p += ".";
+    return p;
+  }).join(" ");
+}
+
+// The lock-screen preview: the start of a message, always cut off with "…".
+// Short messages are cut too (to at most 60% of their length), so nothing is ever fully visible.
+function previewText(msg) {
+  const chars = [...String(msg).trim()];
+  const cap = Math.max(1, Math.min(CONFIG.notificationPreviewChars || 20, Math.floor(chars.length * 0.6)));
+  let cut = chars.slice(0, cap).join("");
+  const lastSpace = cut.lastIndexOf(" ");
+  if (chars[cap] !== " " && lastSpace > 0) cut = cut.slice(0, lastSpace);
+  return cut.replace(/[\s,.;:!?-]+$/, "") + "…";
+}
+
+// Checks the settings block and returns a list of problems (empty = fine).
+function checkConfig() {
+  const problems = [];
+  const ids = new Set();
+  for (const lvl of LEVELS) {
+    const n = CONFIG.scenarios.filter(sc => sc.closeness === lvl).length;
+    if (n !== 2) problems.push("There must be exactly 2 scenarios with closeness \"" + lvl + "\" (found " + n + ").");
+  }
+  CONFIG.scenarios.forEach((sc, i) => {
+    const name = sc.id || "scenario " + (i + 1);
+    if (!sc.id) problems.push("Scenario " + (i + 1) + " has no id.");
+    else if (ids.has(sc.id)) problems.push("Two scenarios share the id \"" + sc.id + "\".");
+    ids.add(sc.id);
+    if (!LEVELS.includes(sc.closeness)) problems.push(name + ": closeness must be \"close\", \"acquaintance\" or \"new\".");
+    if (typeof sc.short !== "string" || !sc.short.trim()) problems.push(name + ": the short message is missing.");
+    if (!Array.isArray(sc.burst) || sc.burst.length < 2 || sc.burst.some(b => typeof b !== "string" || !b.trim()))
+      problems.push(name + ": burst must be a list of at least 2 messages in [ ].");
+    else if (typeof sc.short === "string" && previewText(sc.short) !== previewText(sc.burst[0]))
+      problems.push(name + ": the short message must start with the same words as the first burst message, so the lock-screen preview is the same in every format. Right now they show \"" +
+        previewText(sc.short) + "\" and \"" + previewText(sc.burst[0]) + "\".");
+    try { parseClock(sc.arrivalTime); } catch (e) { problems.push(name + ": " + e.message); }
+    if (sc.weekday && !WEEKDAYS.includes(sc.weekday)) problems.push(name + ": weekday must be a full day name like \"Wednesday\".");
+  });
+  try { buildSteps(parseClock("7:00 pm")); } catch (e) { problems.push("Time steps: " + e.message); }
+  try { parseClock(CONFIG.practice.arrivalTime); } catch (e) { problems.push("Practice: " + e.message); }
+  return problems;
+}
+
+/* ======================= counterbalancing ======================= */
+// 12 lists. In every list: each of the 6 conditions appears once, and each closeness
+// level gets one receipts-ON chat and one receipts-OFF chat. Across the 12 lists,
+// every scenario is paired with every condition exactly twice.
+function buildPlan(listNo) {            // listNo: 1–12
+  const L = listNo - 1;
+  const r = L % 3, s = 1 + (Math.floor(L / 3) % 2), b = Math.floor(L / 6) % 2;
+  const specs = [];
+  LEVELS.forEach((lvl, k) => {
+    CONFIG.scenarios.filter(sc => sc.closeness === lvl).forEach((sc, w) => {
+      const receipts = w === b ? "on" : "off";
+      const f = receipts === "on" ? (k + r) % 3 : (k + r + s) % 3;
+      specs.push({ scenario: sc, receipts, format: FORMATS[f] });
+    });
+  });
+  return spreadShuffle(specs);
+}
+// Random order, avoiding two chats in a row with the same closeness level
+// (so the same nicknamed person never texts twice in a row).
+function spreadShuffle(specs) {
+  for (let i = 0; i < 1000; i++) {
+    const a = shuffle(specs);
+    if (a.every((x, j) => j === 0 || x.scenario.closeness !== a[j - 1].scenario.closeness)) return a;
+  }
+  return shuffle(specs);
+}
+// Asks the Google Sheet for the next list (1, 2, … 12, 1, 2, …) so lists stay balanced.
+// Falls back to a random list if the Sheet can't be reached within 8 seconds.
+async function requestList() {
+  if (FORCED_LIST) return { list: FORCED_LIST, source: "forced_in_test" };
+  if (SENDING && ENDPOINT_SET) {
+    try {
+      const url = CONFIG.data.endpoint + "?action=list&key=" + encodeURIComponent(CONFIG.data.key) + (TEST ? "&test=1" : "");
+      const res = await fetchWithTimeout(url, { method: "GET" }, 8000);
+      const j = await res.json();
+      if (j.ok && j.list >= 1 && j.list <= 12) return { list: j.list, source: TEST ? "counter_test_peek" : "counter" };
+    } catch (e) { console.warn("List counter unavailable:", e); }
+  }
+  return { list: 1 + randInt(12), source: SENDING ? "random_fallback" : "random_test" };
+}
+function fetchWithTimeout(url, opts, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, Object.assign({ redirect: "follow", signal: ctrl.signal }, opts)).finally(() => clearTimeout(timer));
+}
+
+/* ======================= data & privacy ======================= */
+function makeCode() {
+  const A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const r = new Uint32Array(8); crypto.getRandomValues(r);
+  const s = Array.from(r, x => A[x % A.length]).join("");
+  return s.slice(0, 4) + "-" + s.slice(4);
+}
+const DATA = {
+  participant: (TEST ? "TEST-" : "") + makeCode(),
+  startedAt: Date.now(),
+  list: "", listSource: "", order: "",
+  answers: {},             // consent, end questions
+  nicknameUsed: { close: "n", acquaintance: "n", new: "n" },
+  trials: [],              // one summary row per chat (this visit only; for the test view)
+  events: []               // every action (this visit only; for the test view)
+};
+
+/* --- progress kept on the participant's phone (never nicknames) ---
+   Lets someone carry on after an accidental reload, and stops the same
+   phone taking part twice. Test mode uses separate storage. */
+const STORE_KEY = TEST_SEND ? "chatstudy_testsend_v1" : TEST ? "chatstudy_test_v1" : "chatstudy_v1";
+const OUTBOX_KEY = STORE_KEY + "_outbox";
+function loadStore(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } }
+function saveStore(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+function clearStore() { try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(OUTBOX_KEY); } catch (e) {} }
+let STATE = null;            // { participant, startedAt, consentAt, stage, list, listSource, plan, next, inProgress, chatsDone, resumes, nicknameUsed, currentEvents }
+function saveState() { if (STATE) saveStore(STORE_KEY, STATE); }
+
+/* --- sending to the Google Sheet ---
+   Every save is a "batch" put in an outbox kept on the phone. The outbox is sent
+   in order; anything that fails stays there and is retried (every few seconds,
+   when the connection comes back, and next time the page is opened).
+   Each batch has an id, so the Sheet ignores a batch it has already received. */
+let OUTBOX = SENDING ? loadStore(OUTBOX_KEY, []) : [];
+const SENT_LOG = [];         // test view: what has been sent / would have been sent
+let flushing = false, retryTimer = null, failures = 0, saveListeners = [];
+
+function queueBatch(tables) {
+  const batch = { batchId: DATA.participant + "-" + Date.now().toString(36) + "-" + randInt(1e9).toString(36), tables };
+  if (!SENDING) { SENT_LOG.push({ batchId: batch.batchId, status: "not sent (test mode)", tables }); notifySave(); return; }
+  OUTBOX.push(batch);
+  saveStore(OUTBOX_KEY, OUTBOX);
+  flushOutbox();
+}
+function saveStatus() { return !SENDING ? "test" : OUTBOX.length === 0 ? "saved" : failures > 0 ? "failed" : "saving"; }
+function notifySave() { saveListeners.forEach(fn => fn(saveStatus())); }
+
+async function flushOutbox() {
+  if (!SENDING || flushing || !OUTBOX.length) { notifySave(); return; }
+  flushing = true; notifySave();
+  try {
+    while (OUTBOX.length) {
+      const b = OUTBOX[0];
+      const result = await postBatch(b);
+      if (!result.ok) throw new Error(result.error || "send failed");
+      OUTBOX.shift();
+      saveStore(OUTBOX_KEY, OUTBOX);
+      SENT_LOG.push({ batchId: b.batchId, status: result.duplicate ? "already received" : "sent", tables: b.tables });
+      failures = 0;
+    }
+  } catch (e) {
+    failures++;
+    console.warn("Saving failed (will retry):", e.message);
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(flushOutbox, Math.min(60000, 3000 * Math.pow(2, failures - 1)));
+  } finally {
+    flushing = false;
+    notifySave();
+  }
+}
+async function postBatch(b) {
+  if (!ENDPOINT_SET) return { ok: false, error: "No web app URL in the settings (data → endpoint)." };
+  try {
+    const res = await fetchWithTimeout(CONFIG.data.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },   // avoids an extra browser permission check
+      body: JSON.stringify({ key: CONFIG.data.key, test: TEST, batchId: b.batchId, tables: b.tables })
+    }, 20000);
+    return await res.json();
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+window.addEventListener("online", () => { failures = 0; flushOutbox(); });
+// Last-ditch attempt when the page is being closed. The Sheet ignores duplicates.
+window.addEventListener("pagehide", () => {
+  if (!SENDING || !ENDPOINT_SET || !OUTBOX.length || !navigator.sendBeacon) return;
+  for (const b of OUTBOX) {
+    try {
+      navigator.sendBeacon(CONFIG.data.endpoint, new Blob([JSON.stringify({ key: CONFIG.data.key, test: TEST, batchId: b.batchId, tables: b.tables })], { type: "text/plain;charset=utf-8" }));
+    } catch (e) {}
+  }
+});
+
+// Nicknames live only in memory. They are never saved or sent, and any time a
+// participant types one, it is replaced with [CONTACT] before logging.
+const NICKNAMES = { close: "", acquaintance: "", new: "" };
+function redact(s) {
+  let out = String(s);
+  for (const nick of Object.values(NICKNAMES)) {
+    if (!nick) continue;
+    const parts = [nick.trim(), ...nick.trim().split(/\s+/).filter(w => charLen(w) >= 3)];
+    for (const p of [...new Set(parts)].sort((a, b) => b.length - a.length)) {
+      if (!p) continue;
+      const esc = p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      let re;
+      try { re = new RegExp("(?<![\\p{L}\\p{N}])" + esc + "(?![\\p{L}\\p{N}])", "giu"); }
+      catch (e) { re = new RegExp("\\b" + esc + "\\b", "gi"); }
+      out = out.replace(re, "[CONTACT]");
+    }
+  }
+  return out;
+}
+
+function simLabel(T, abs) { return (dayOf(abs) > dayOf(T.arrivalAbs) ? "next day " : "") + fmtClock(abs); }
+
+function logEvent(T, type, f = {}) {
+  const now = Date.now();
+  const ev = {
+    participant: DATA.participant,
+    trial_pos: T.position,
+    scenario: T.scenario.id,
+    condition: T.conditionCode,
+    closeness: T.scenario.closeness,
+    event: type,
+    where: T.where,
+    step: T.stepIndex,
+    step_label: T.steps[T.stepIndex].label,
+    sim_time: simLabel(T, T.simAbs),
+    sim_min_since_arrival: T.simAbs - T.arrivalAbs,
+    t_ms: now,
+    t_trial_ms: now - T.t0,
+    msg_id: f.msg != null ? f.msg : "",
+    text: f.text != null ? redact(f.text) : "",
+    len: f.text != null ? charLen(f.text) : "",
+    latency_ms: f.latency != null ? f.latency : "",
+    value: f.value != null ? f.value : "",
+    note: f.note != null ? redact(f.note) : ""
+  };
+  DATA.events.push(ev);
+  T.events.push(ev);
+  if (STATE && STATE.inProgress === T.position) { STATE.currentEvents = T.events; saveState(); }
+  return ev;
+}
+
+/* ======================= app shell ======================= */
+const App = { skip: null, trial: null };
+const $root = document.getElementById("app");
+const $testInfo = h("span", { class: "testinfo" }, "TEST MODE");
+const $test = TEST ? h("div", { class: "testbar" }, $testInfo,
+  h("button", { class: "testskip", type: "button", title: "Forget this test session and start again",
+    onclick() { clearStore(); location.reload(); } }, "Reset"),
+  h("button", { class: "testskip", type: "button", onclick() { if (App.skip) App.skip(); } }, "Skip ▸")) : null;
+const $screen = h("div", { id: "screen" });
+if ($test) $root.append($test);
+$root.append($screen);
+
+function show(el) { App.skip = null; $screen.replaceChildren(el); }
+function page(opts, ...kids) {
+  return h("section", { class: "page" + (opts && opts.centered ? " centered" : "") }, h("div", { class: "page-inner" }, ...kids));
+}
+function setTestInfo(text) { if ($test) $testInfo.textContent = "TEST · " + (DATA.list ? "list " + DATA.list + " · " : "") + text; }
+function describeTrial(T) {
+  if (T.practice) return "PRACTICE · " + T.where + " · step " + T.stepIndex;
+  const fmt = { short: "One short", burst: "Burst of " + T.scenario.burst.length, long: "One long" }[T.format];
+  return "chat " + T.position + " · " + T.scenario.id + " · Receipts " + T.receipts.toUpperCase() + " × " + fmt +
+    " · " + T.scenario.closeness + " · " + T.where + " · step " + T.stepIndex + "/" + (T.steps.length - 1);
+}
+
+// Keep the app glued to the visible screen area (handles the on-screen keyboard
+// on both iPhone Safari and Android Chrome).
+function fitViewport() {
+  const vv = window.visualViewport;
+  const rs = document.documentElement.style;
+  rs.setProperty("--vv-h", (vv ? vv.height : window.innerHeight) + "px");
+  rs.setProperty("--vv-top", (vv ? vv.offsetTop : 0) + "px");
+}
+fitViewport();
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", fitViewport);
+  visualViewport.addEventListener("scroll", fitViewport);
+}
+window.addEventListener("resize", fitViewport);
+document.addEventListener("focusin", e => {
+  if (COARSE_POINTER && e.target.matches("textarea, input[type=text]")) document.documentElement.classList.add("kb-open");
+});
+document.addEventListener("focusout", () => {
+  document.documentElement.classList.remove("kb-open");
+  setTimeout(fitViewport, 50);
+});
+// Log when the participant switches away from the page mid-chat.
+document.addEventListener("visibilitychange", () => {
+  if (App.trial) logEvent(App.trial, document.hidden ? "page_hidden" : "page_visible");
+});
+
+// Counts a clock up from one time to another. Always finishes after `ms`,
+// even if the phone slows down animations.
+function animateClock(el, from, to, ms) {
+  if (REDUCED_MOTION || to === from) { el.textContent = fmtClock(to); return sleep(ms); }
+  return new Promise(res => {
+    const t0 = performance.now();
+    let done = false;
+    const tick = now => {
+      if (done) return;
+      const k = Math.min(1, (now - t0) / ms);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      el.textContent = fmtClock(Math.round(from + (to - from) * e));
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    setTimeout(() => { done = true; el.textContent = fmtClock(to); res(); }, ms);
+  });
+}
+
+// Buttons where exactly one option can be picked.
+function choiceGroup(labelId, options, onPick) {
+  const wrap = h("div", { class: "seg", role: "group", "aria-labelledby": labelId });
+  for (const opt of options) wrap.append(h("button", { type: "button", "aria-pressed": "false", onclick(e) {
+    wrap.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b === e.currentTarget)));
+    onPick(opt);
+  } }, opt));
+  return wrap;
+}
+let qCounter = 0;
+function question(label, control) {
+  const id = "q" + (++qCounter);
+  if (typeof control === "function") control = control(id);
+  return h("div", { class: "q" }, h("div", { class: "q-label", id }, label), control);
+}
+
+// A 0–100 slider with no starting position. A vertical swipe scrolls the page
+// instead of setting a value by accident.
+function makeSlider(labelId, left, right, onSet) {
+  const thumb = h("div", { class: "thumb" });
+  const rail = h("div", { class: "rail" }, thumb);
+  const track = h("div", { class: "track untouched", role: "slider", tabindex: "0",
+    "aria-labelledby": labelId, "aria-valuemin": "0", "aria-valuemax": "100" }, rail);
+  let val = null, drag = null;
+  const set = v => {
+    val = Math.max(0, Math.min(100, Math.round(v)));
+    thumb.style.left = val + "%";
+    track.classList.remove("untouched");
+    track.setAttribute("aria-valuenow", String(val));
+    onSet(val);
+  };
+  const fromX = x => { const r = rail.getBoundingClientRect(); return (x - r.left) / r.width * 100; };
+  track.addEventListener("pointerdown", e => {
+    drag = { id: e.pointerId, x: e.clientX, moved: false };
+    if (e.pointerType === "mouse") { set(fromX(e.clientX)); drag.moved = true; }
+  });
+  track.addEventListener("pointermove", e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.x) > 6) { drag.moved = true; try { track.setPointerCapture(e.pointerId); } catch (_) {} }
+    if (drag.moved) set(fromX(e.clientX));
+  });
+  track.addEventListener("pointerup", e => { if (drag && drag.id === e.pointerId) { set(fromX(e.clientX)); drag = null; } });
+  track.addEventListener("pointercancel", () => { drag = null; });
+  track.addEventListener("keydown", e => {
+    const step = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10 }[e.key];
+    if (step) { e.preventDefault(); set((val == null ? 50 : val) + step); }
+  });
+  return h("div", null, track, h("div", { class: "ends" }, h("span", null, left), h("span", null, right)));
+}
+
+/* ======================= screens before the chats ======================= */
+function consentScreen() {
+  return new Promise(resolve => {
+    const C = CONFIG.consent;
+    const box = h("input", { type: "checkbox", id: "consent-box" });
+    const btn = h("button", { class: "btn", type: "button", disabled: true }, C.button);
+    box.addEventListener("change", () => { btn.disabled = !box.checked; });
+    btn.addEventListener("click", () => { DATA.answers.consent = "y"; DATA.answers.consent_at = new Date().toISOString(); resolve(); });
+    show(page(null,
+      h("h1", null, C.title),
+      h("div", { class: "prose" }, C.paragraphs.map(p => h("p", null, p))),
+      h("p", { class: "note" }, C.recordingNotice),
+      h("label", { class: "check", for: "consent-box" }, box, h("span", null, C.checkbox)),
+      btn));
+    App.skip = () => { DATA.answers.consent = "y (test skip)"; resolve(); };
+  });
+}
+
+function eligibilityScreen() {
+  return new Promise(resolve => {
+    const E = CONFIG.eligibility;
+    const ans = {};
+    const btn = h("button", { class: "btn", type: "button", disabled: true }, CONFIG.consent.button);
+    const qs = E.questions.map(q => question(q.question, id => choiceGroup(id, [E.yes, E.no], v => {
+      ans[q.id] = v; btn.disabled = Object.keys(ans).length < E.questions.length;
+    })));
+    btn.addEventListener("click", () => resolve(E.questions.every(q => ans[q.id] === E.yes)));
+    show(page(null, h("h1", null, E.title), ...qs, btn));
+    App.skip = () => resolve(true);
+  });
+}
+
+function ineligibleScreen() {
+  const E = CONFIG.eligibility;
+  setTestInfo("ineligible: nothing is saved");
+  show(page({ centered: true }, h("h1", null, E.ineligibleTitle), h("p", null, E.ineligibleText)));
+}
+
+// resuming = true when someone comes back after the page closed: nicknames are
+// never stored, so they're asked again.
+function nicknameScreen(resuming) {
+  return new Promise(resolve => {
+    const N = CONFIG.nicknames;
+    const inputs = {};
+    const fields = LEVELS.map(lvl => {
+      const id = "nick-" + lvl;
+      inputs[lvl] = h("input", { class: "text-input", id, type: "text", autocomplete: "off", autocapitalize: "words",
+        spellcheck: "false", maxlength: "30", placeholder: N.placeholder });
+      return h("div", { class: "q" }, h("label", { class: "field-label", for: id }, N.labels[lvl]), inputs[lvl]);
+    });
+    const done = () => {
+      for (const lvl of LEVELS) {
+        NICKNAMES[lvl] = inputs[lvl].value.trim();
+        DATA.nicknameUsed[lvl] = NICKNAMES[lvl] || (resuming && DATA.nicknameUsed[lvl] === "y") ? "y" : "n";
+      }
+      resolve();
+    };
+    show(page(null,
+      h("h1", null, N.title),
+      h("p", null, resuming ? CONFIG.resume.nicknameText : N.intro),
+      h("p", { class: "note small" }, N.privacy),
+      ...fields,
+      h("button", { class: "btn", type: "button", onclick: done }, N.button)));
+    App.skip = done;
+  });
+}
+
+function instructionsScreen() {
+  return new Promise(resolve => {
+    const I = CONFIG.instructions;
+    show(page(null, h("h1", null, I.title), h("div", { class: "prose" }, I.paragraphs.map(p => h("p", null, p))),
+      h("button", { class: "btn", type: "button", onclick: () => resolve() }, I.button)));
+    App.skip = () => resolve();
+  });
+}
+
+// While this screen is read, the list number is fetched from the Sheet in the background.
+function practiceDoneScreen(listPromise) {
+  return new Promise(resolve => {
+    const P = CONFIG.practice;
+    const btn = h("button", { class: "btn", type: "button" }, P.doneButton);
+    const go = async () => { btn.disabled = true; btn.textContent = "One moment…"; await listPromise; resolve(); };
+    btn.addEventListener("click", go);
+    show(page({ centered: true }, h("h1", null, P.doneTitle), h("p", null, P.doneText), btn));
+    App.skip = go;
+  });
+}
+
+function resumeScreen(skippedChat) {
+  return new Promise(resolve => {
+    const R = CONFIG.resume;
+    show(page({ centered: true }, h("h1", null, R.title), h("p", null, R.text),
+      skippedChat ? h("p", null, R.skippedChat) : null,
+      h("button", { class: "btn", type: "button", onclick: () => resolve() }, R.button)));
+    App.skip = () => resolve();
+  });
+}
+
+/* ======================= one chat (trial) ======================= */
+function makeTrial(spec) {
+  const arrivalAbs = parseClock(spec.scenario.arrivalTime);
+  return Object.assign({}, spec, {
+    arrivalAbs,
+    simAbs: arrivalAbs,
+    steps: buildSteps(arrivalAbs),
+    incoming: incomingMessages(spec.scenario, spec.format),
+    conditionCode: spec.practice ? "PRACTICE" : "RR_" + spec.receipts.toUpperCase() + "_" + spec.format.toUpperCase(),
+    t0: Date.now(),
+    where: "context",
+    stepIndex: 0,
+    stepStartReal: null,
+    arrivedReal: null,
+    openReal: null,
+    events: [],              // this chat's events (sent to the Sheet with the summary row)
+    transcript: [],          // everything said in the chat, in order
+    tally: {
+      opened: false, openStep: null, openMin: null, openRealMs: null,
+      waitsBeforeOpen: 0, waitsAfterOpen: 0,
+      replies: 0, replyChars: 0, replyWords: 0,
+      firstReplyStep: null, firstReplyMin: null, firstReplyRealMs: null,
+      deletes: 0, firstKeyReal: null, lastSendReal: null,
+      erasures: 0, erasedChars: 0, erasedChunks: [], unsentAtEnd: ""
+    }
+  });
+}
+
+function practiceSpec() {
+  const P = CONFIG.practice;
+  return {
+    practice: true, position: 0, positionLabel: "Practice",
+    scenario: { id: "PRACTICE", closeness: "practice", topicType: "", contactName: P.contactName, context: P.context,
+      weekday: P.weekday, arrivalTime: P.arrivalTime, short: P.message, burst: [P.message] },
+    receipts: "practice", format: "short", contactName: P.contactName, usedNickname: false
+  };
+}
+
+async function runTrial(spec) {
+  const T = makeTrial(spec);
+  App.trial = T;
+  setTestInfo(describeTrial(T));
+  logEvent(T, "trial_start", { note: "receipts=" + T.receipts + "; format=" + T.format + "; nickname_used=" + (T.usedNickname ? "y" : "n") });
+  T.incoming.forEach((text, i) => T.transcript.push({ who: "CONTACT", abs: T.arrivalAbs, text, id: "c" + (i + 1) }));
+
+  let reason = "test_skip", ratings = {};
+  if ((await showContext(T)) !== "skip") {
+    const lock = await runLockScreen(T);
+    if (lock === "open") reason = await runChat(T);
+    else if (lock === "unopened") reason = "left_unopened";
+    if (reason !== "test_skip") {
+      await showClosed(T);
+      if (!T.practice) ratings = await showRatings(T);
+    }
+  }
+  T.where = "end";
+  logEvent(T, "trial_end", { note: reason });
+  App.trial = null;
+  const row = summarize(T, reason, ratings);
+  DATA.trials.push(row);
+  return { row, events: T.events };
+}
+
+function receiptText(T, key) {
+  if (T.practice) return CONFIG.practice["receipt" + key[0].toUpperCase() + key.slice(1)];
+  return fill(CONFIG.receipts[T.receipts][key], { contact: T.contactName });
+}
+
+function showContext(T) {
+  return new Promise(resolve => {
+    const text = fill(T.scenario.context, { contact: T.contactName, relationship: CONFIG.closenessLabels[T.scenario.closeness] || "" });
+    logEvent(T, "context_shown");
+    show(page({ centered: true },
+      h("p", { class: "eyebrow" }, T.positionLabel),
+      h("div", { class: "card" },
+        h("p", { class: "context-text" }, text),
+        h("div", { class: "receipt-box" },
+          svg(T.receipts === "off" ? ICON_EYE_OFF : ICON_EYE),
+          h("div", null, h("p", { class: "receipt-title" }, receiptText(T, "title")), h("p", { class: "muted" }, receiptText(T, "detail"))))),
+      h("button", { class: "btn", type: "button", onclick() { logEvent(T, "context_ack"); resolve("ok"); } }, CONFIG.labels.contextButton)
+    ));
+    App.skip = () => { logEvent(T, "test_skip"); resolve("skip"); };
+  });
+}
+
+/* --- lock screen: the message arrives as a notification --- */
+function runLockScreen(T) {
+  return new Promise(resolve => {
+    const L = CONFIG.labels, sc = T.scenario;
+    let ended = false, busy = true;
+    T.where = "lock_screen";
+    const lastStep = T.steps.length - 1;
+    const dateFor = abs => {
+      const base = WEEKDAYS.indexOf(sc.weekday);
+      return base < 0 ? "" : WEEKDAYS[(base + dayOf(abs) - dayOf(T.arrivalAbs)) % 7];
+    };
+    const agoText = mins => mins < 1 ? "now" : mins < 60 ? mins + "m ago" : Math.floor(mins / 60) + "h ago";
+
+    const dateEl = h("div", { class: "lock-date" }, dateFor(T.simAbs));
+    const clockEl = h("div", { class: "lock-clock" }, fmtClock(T.simAbs));
+    const stepEl = h("div", { class: "lock-step" });
+    const ago = h("span", { class: "notif-ago" }, "now");
+    const preview = previewText(T.incoming[0]);
+    const count = h("div", { class: "notif-count", hidden: true });
+    const card = h("button", { class: "notif", type: "button", hidden: true, "aria-label": "Message from " + T.contactName + ". Tap to open.",
+      onclick() { open("notification"); } },
+      h("div", { class: "notif-head" }, h("span", { class: "app-icon" }, svg(ICON_CHAT)), h("span", null, L.appName), ago),
+      h("div", { class: "notif-name" }, T.contactName),
+      h("div", { class: "notif-line" }, preview),
+      count);
+    const btnWait = h("button", { class: "act", type: "button", disabled: true, onclick: onWait }, L.wait);
+    const btnUnopened = h("button", { class: "act", type: "button", hidden: true, onclick: onUnopened }, L.leaveUnopened);
+    const btnOpen = h("button", { class: "act", type: "button", disabled: true, onclick() { open("button"); } }, L.openChat);
+    show(h("section", { class: "lock" },
+      h("div", { class: "lock-top" }, dateEl, clockEl, stepEl),
+      h("div", { class: "lock-notifs" }, card),
+      T.practice ? h("div", { class: "coach" }, CONFIG.practice.coachLock) : null,
+      h("div", { class: "lock-actions" }, btnUnopened, btnWait, btnOpen)));
+    App.skip = () => { if (!ended) { ended = true; logEvent(T, "test_skip"); resolve("skip"); } };
+    setTestInfo(describeTrial(T));
+    logEvent(T, "lock_screen_shown");
+
+    // The message(s) arrive one by one.
+    (async () => {
+      await sleep(900);
+      for (let i = 0; i < T.incoming.length; i++) {
+        if (ended) return;
+        card.hidden = false;
+        if (i > 0) { count.hidden = false; count.textContent = fill(L.messagesCount, { n: i + 1 }); }
+        if (i === 0) T.arrivedReal = Date.now();
+        logEvent(T, "notification_shown", { msg: "c" + (i + 1), text: T.incoming[i], note: "preview shown: " + preview + (i > 0 ? " (" + (i + 1) + " messages)" : "") });
+        if (i < T.incoming.length - 1) await sleep(CONFIG.secondsBetweenBurstMessages * 1000);
+      }
+      if (ended) return;
+      T.stepStartReal = Date.now();
+      busy = false;
+      btnWait.disabled = false; btnOpen.disabled = false;
+    })();
+
+    async function onWait() {
+      if (busy || ended) return;
+      busy = true; btnWait.disabled = true; btnOpen.disabled = true;
+      T.tally.waitsBeforeOpen++;
+      logEvent(T, "wait");
+      const target = T.steps[T.stepIndex + 1];
+      stepEl.textContent = L.timePasses;
+      await animateClock(clockEl, T.simAbs, target.abs, CONFIG.secondsPerTimeJump * 1000);
+      if (ended) return;
+      T.stepIndex = target.index; T.simAbs = target.abs; T.stepStartReal = Date.now();
+      stepEl.textContent = target.label;
+      dateEl.textContent = dateFor(T.simAbs);
+      ago.textContent = agoText(T.simAbs - T.arrivalAbs);
+      logEvent(T, "step_start");
+      setTestInfo(describeTrial(T));
+      if (T.stepIndex >= lastStep) { btnWait.hidden = true; btnUnopened.hidden = false; }
+      busy = false; btnWait.disabled = false; btnOpen.disabled = false;
+    }
+    function open(via) {
+      if (busy || ended) return;
+      ended = true;
+      const t = T.tally;
+      T.openReal = Date.now();
+      t.opened = true; t.openStep = T.stepIndex; t.openMin = T.simAbs - T.arrivalAbs; t.openRealMs = T.openReal - T.arrivedReal;
+      logEvent(T, "open_chat", { latency: t.openRealMs, note: "via " + via });
+      resolve("open");
+    }
+    function onUnopened() {
+      if (busy || ended) return;
+      ended = true;
+      logEvent(T, "leave_unopened");
+      resolve("unopened");
+    }
+  });
+}
+
+/* --- the chat --- */
+function runChat(T) {
+  return new Promise(resolve => {
+    const L = CONFIG.labels;
+    const t = T.tally;
+    const lastStep = T.steps.length - 1;
+    T.where = "chat";
+    const mine = [];          // the participant's messages
+    let ended = false, busy = false, sheet = null;
+    let prevDraft = "", eraseRun = null, firstKeyInStep = false, lastChipDay = null;
+
+    /* --- build the screen --- */
+    const clockEl = h("div", { class: "head-clock" }, fmtClock(T.simAbs));
+    const head = h("header", { class: "chat-head" },
+      h("div", { class: "avatar", "aria-hidden": "true" }, initial(T.contactName)),
+      h("div", { class: "head-name" }, T.contactName),
+      clockEl);
+    const list = h("div", { class: "chat-list", role: "log", "aria-live": "polite" });
+    const scroller = h("main", { class: "chat-scroll" }, list);
+    const btnLeave = h("button", { class: "act", type: "button", onclick: onLeave }, L.leave);
+    const btnWait = h("button", { class: "act", type: "button", onclick: onWait }, L.wait);
+    const actions = h("div", { class: "actions" }, btnLeave, btnWait);
+    const input = h("textarea", { class: "input", id: "composer", rows: "1", placeholder: L.composerPlaceholder,
+      "aria-label": "Type a message", autocomplete: "off", autocapitalize: "sentences", spellcheck: "true" });
+    const sendBtn = h("button", { class: "send", type: "button", "aria-label": "Send", disabled: true }, svg(ICON_SEND));
+    const composer = h("div", { class: "composer" }, input, sendBtn);
+    const coach = T.practice ? h("div", { class: "coach" }, CONFIG.practice.coachChat) : null;
+    const screen = h("section", { class: "chat" }, head, scroller, coach, actions, composer);
+    const statusEl = h("div", { class: "status" });
+
+    /* --- what's already in the chat when it opens --- */
+    addDayChip(T.arrivalAbs);
+    list.append(h("div", { class: "chip-row" },
+      h("div", { class: "notice" }, svg(T.receipts === "off" ? ICON_EYE_OFF : ICON_EYE), h("span", null, receiptText(T, "notice")))));
+    for (const text of T.incoming) addBubble("them", text, fmtClock(T.arrivalAbs));
+
+    show(screen);
+    App.skip = () => { logEvent(T, "test_skip"); finish("test_skip"); };
+    logEvent(T, "chat_shown");
+    T.stepStartReal = Date.now();
+    updateButtons();
+    setTestInfo(describeTrial(T));
+    scrollToBottom();
+
+    /* --- events --- */
+    sendBtn.addEventListener("pointerdown", e => e.preventDefault()); // keeps the keyboard open
+    sendBtn.addEventListener("click", onSend);
+    input.addEventListener("input", onInput);
+    input.addEventListener("keydown", e => {
+      if (!COARSE_POINTER && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); onSend(); }
+    });
+    input.addEventListener("focus", () => setTimeout(scrollToBottom, 300));
+    if (window.visualViewport) visualViewport.addEventListener("resize", scrollToBottom);
+
+    /* --- rendering helpers --- */
+    function addChip(text) {
+      statusEl.remove();
+      list.append(h("div", { class: "chip-row" }, h("span", { class: "chip" }, text)));
+    }
+    function addDayChip(abs) {
+      lastChipDay = dayOf(abs);
+      addChip(dayOf(abs) < dayOf(T.simAbs) ? L.yesterday : L.today);
+    }
+    function addBubble(who, text, time) {
+      statusEl.remove();
+      const prev = list.lastElementChild;
+      const row = h("div", { class: "row " + who + (prev && prev.classList.contains(who) ? "" : " first") });
+      const bubble = h("div", { class: "bubble" }, h("span", { class: "txt" }, text), time ? h("span", { class: "t" }, time) : null);
+      row.append(bubble);
+      list.append(row);
+      return { row, bubble };
+    }
+    function scrollToBottom() { requestAnimationFrame(() => { scroller.scrollTop = scroller.scrollHeight; }); }
+    function renderStatus() {
+      if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80) scrollToBottom();
+      const last = mine.slice().reverse().find(m => !m.deleted);
+      if (!last || !last.delivered) { statusEl.remove(); return; }
+      statusEl.textContent = L.delivered;
+      last.row.after(statusEl);
+    }
+    function updateButtons() {
+      // Wait is only offered before the first reply, and not after the last time step.
+      btnWait.hidden = t.replies > 0 || T.stepIndex >= lastStep;
+      sendBtn.disabled = !input.value.trim();
+    }
+
+    /* --- sending --- */
+    function onSend() {
+      if (busy || ended) return;
+      const raw = input.value, text = raw.trim();
+      if (!text) return;
+      closeEraseRun(raw);
+      const now = Date.now();
+      const n = ++t.replies;
+      t.replyChars += charLen(text); t.replyWords += wordCount(text); t.lastSendReal = now;
+      if (n === 1) { t.firstReplyStep = T.stepIndex; t.firstReplyMin = T.simAbs - T.arrivalAbs; t.firstReplyRealMs = now - T.openReal; }
+      if (dayOf(T.simAbs) !== lastChipDay) addDayChip(T.simAbs);
+      const b = addBubble("me", text, fmtClock(T.simAbs));
+      const m = { id: "r" + n, text, row: b.row, bubble: b.bubble, delivered: false, deleted: false, abs: T.simAbs };
+      mine.push(m);
+      T.transcript.push({ who: "YOU", abs: T.simAbs, text, id: m.id });
+      attachLongPress(m);
+      logEvent(T, "reply_send", { msg: m.id, text });
+      setTimeout(() => { if (!ended) { m.delivered = true; renderStatus(); } }, 450);
+      input.value = ""; prevDraft = "";
+      autoGrow(); updateButtons(); renderStatus(); scrollToBottom();
+    }
+
+    /* --- typing: first keystroke and erased text --- */
+    function onInput() {
+      const cur = input.value, now = Date.now();
+      if (!firstKeyInStep) {
+        firstKeyInStep = true;
+        logEvent(T, "first_keystroke", { latency: now - T.stepStartReal });
+        if (t.firstKeyReal == null) t.firstKeyReal = now;
+      }
+      const d = diffText(prevDraft, cur);
+      if (charLen(d.removed) > charLen(d.inserted)) { if (!eraseRun) eraseRun = { before: prevDraft }; }
+      else if (d.inserted && eraseRun) closeEraseRun(prevDraft);
+      prevDraft = cur;
+      autoGrow(); updateButtons();
+    }
+    function closeEraseRun(after) {
+      if (!eraseRun) return;
+      const before = eraseRun.before; eraseRun = null;
+      const removed = diffText(before, after).removed;
+      if (!removed.trim()) return;
+      t.erasures++; t.erasedChars += charLen(removed); t.erasedChunks.push(removed);
+      logEvent(T, "text_erased", { text: removed, note: "draft before erasing: " + before });
+    }
+    function logDraftIfAny(context) {
+      closeEraseRun(input.value);
+      if (input.value.trim()) logEvent(T, "draft_unsent", { text: input.value, note: "at " + context });
+    }
+    function autoGrow() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight + 2, 132) + "px"; }
+
+    /* --- Wait and Leave --- */
+    async function onWait() {
+      if (busy || ended || btnWait.hidden) return;
+      logDraftIfAny("wait");
+      t.waitsAfterOpen++;
+      logEvent(T, "wait");
+      input.blur();
+      busy = true;
+      const target = T.steps[T.stepIndex + 1];
+      await timeJump(T.simAbs, target.abs);
+      if (ended) return;
+      T.stepIndex = target.index; T.simAbs = target.abs; T.stepStartReal = Date.now();
+      firstKeyInStep = false;
+      clockEl.textContent = fmtClock(T.simAbs);
+      lastChipDay = dayOf(T.simAbs);
+      addChip(target.label + " · " + fmtClock(target.abs));
+      logEvent(T, "step_start");
+      setTestInfo(describeTrial(T));
+      updateButtons(); renderStatus(); scrollToBottom();
+      busy = false;
+    }
+    async function timeJump(from, to) {
+      const clock = h("div", { class: "tj-clock" }, fmtClock(from));
+      const ov = h("div", { class: "timejump", role: "status" }, h("div", { class: "tj-card" }, clock, h("div", { class: "tj-label" }, L.timePasses)));
+      screen.append(ov);
+      await animateClock(clock, from, to, CONFIG.secondsPerTimeJump * 1000);
+      await sleep(300);
+      ov.remove();
+    }
+    function onLeave() {
+      if (busy || ended) return;
+      logDraftIfAny("leave");
+      logEvent(T, "leave_chat");
+      finish(t.replies > 0 ? "left_after_reply" : "left_without_reply");
+    }
+
+    /* --- long-press to delete one of your own messages --- */
+    function attachLongPress(m) {
+      const b = m.bubble;
+      let timer = null, sx = 0, sy = 0, opened = false;
+      const cancel = () => { clearTimeout(timer); timer = null; b.classList.remove("pressing"); };
+      const usable = () => !m.deleted && !ended && !busy && !sheet;
+      b.addEventListener("pointerdown", e => {
+        if (!usable()) return;
+        sx = e.clientX; sy = e.clientY; opened = false;
+        b.classList.add("pressing");
+        timer = setTimeout(() => { timer = null; b.classList.remove("pressing"); opened = true; openDeleteSheet(m); }, 500);
+      });
+      b.addEventListener("pointermove", e => { if (timer && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) cancel(); });
+      ["pointerup", "pointercancel", "pointerleave"].forEach(ev => b.addEventListener(ev, cancel));
+      b.addEventListener("contextmenu", e => {
+        e.preventDefault();
+        if (!opened && usable()) { cancel(); opened = true; openDeleteSheet(m); }
+      });
+    }
+    function openDeleteSheet(m) {
+      if (sheet) return;
+      input.blur();
+      logEvent(T, "delete_menu_open", { msg: m.id });
+      const close = () => { if (sheet) { sheet.remove(); sheet = null; } };
+      const cancelDelete = () => { close(); logEvent(T, "delete_cancel", { msg: m.id }); };
+      sheet = h("div", { class: "sheet-scrim", onclick(e) { if (e.target === sheet) cancelDelete(); } },
+        h("div", { class: "sheet", role: "dialog", "aria-label": "Message options" },
+          h("div", { class: "sheet-preview" }, m.text),
+          h("button", { class: "sheet-btn danger", type: "button", onclick() { close(); deleteMessage(m); } }, L.deleteForEveryone),
+          h("button", { class: "sheet-btn", type: "button", onclick: cancelDelete }, L.cancel)));
+      screen.append(sheet);
+    }
+    function deleteMessage(m) {
+      m.deleted = true;
+      m.bubble.classList.add("deleted");
+      m.bubble.replaceChildren(h("span", { class: "txt" }, svg(ICON_BLOCKED), L.deleted), h("span", { class: "t" }, fmtClock(m.abs)));
+      t.deletes++;
+      const entry = T.transcript.find(x => x.id === m.id);
+      if (entry) { entry.deleted = true; entry.deletedAt = T.simAbs; }
+      logEvent(T, "delete_msg", { msg: m.id, text: m.text });
+      renderStatus();
+    }
+
+    function finish(reason) {
+      if (ended) return;
+      ended = true;
+      closeEraseRun(input.value);
+      t.unsentAtEnd = input.value.trim();
+      if (sheet) { sheet.remove(); sheet = null; }
+      input.blur();
+      if (window.visualViewport) visualViewport.removeEventListener("resize", scrollToBottom);
+      logEvent(T, "chat_end", { note: reason });
+      resolve(reason);
+    }
+  });
+}
+
+// What was removed/inserted between two versions of the draft.
+function diffText(a, b) {
+  let p = 0; const max = Math.min(a.length, b.length);
+  while (p < max && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < max - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  return { removed: a.slice(p, a.length - s), inserted: b.slice(p, b.length - s) };
+}
+
+async function showClosed(T) {
+  T.where = "after_chat";
+  show(page({ centered: true }, h("div", { class: "card passing" }, h("p", { class: "big" }, CONFIG.labels.chatClosed))));
+  await sleep(1000);
+}
+
+function showRatings(T) {
+  return new Promise(resolve => {
+    const L = CONFIG.labels;
+    T.where = "ratings";
+    const qs = CONFIG.ratings.filter(q => !(q.onlyIfReplied && T.tally.replies === 0) && !(q.onlyIfOpened && !T.tally.opened));
+    const vals = {}, firstTouch = {};
+    let check = null;
+    const t0 = Date.now();
+    const cont = h("button", { class: "btn", type: "button", disabled: true }, L.continueBtn);
+    const refresh = () => { cont.disabled = Object.keys(vals).length < qs.length || check == null; };
+    const sliders = qs.map(q => question(fill(q.question, { contact: T.contactName }), id => makeSlider(id, q.left, q.right, v => {
+      if (firstTouch[q.id] == null) firstTouch[q.id] = Date.now() - t0;
+      vals[q.id] = v; refresh();
+    })));
+    const rc = CONFIG.receiptCheck;
+    const checkQ = question(fill(rc.question, { contact: T.contactName }), id => choiceGroup(id, rc.options, v => { check = v; refresh(); }));
+    cont.addEventListener("click", () => {
+      for (const q of qs) logEvent(T, "rating", { msg: q.id, value: vals[q.id], latency: firstTouch[q.id] });
+      logEvent(T, "receipt_check", { value: check });
+      resolve(Object.assign({}, vals, { receipt_check: check }));
+    });
+    show(page(null, h("h1", null, L.ratingsTitle), h("p", { class: "muted small" }, L.ratingsHelp), ...sliders, checkQ, cont));
+    App.skip = () => resolve(Object.assign({}, vals, { receipt_check: check }));
+  });
+}
+
+/* --- one summary row per chat --- */
+function summarize(T, reason, ratings) {
+  const t = T.tally;
+  const blank = v => (v == null ? "" : v);
+  const stepLabel = i => (i == null ? "" : T.steps[i].label);
+  const transcript = T.transcript.map(x =>
+    x.who + " " + simLabel(T, x.abs) + (x.deleted ? " [deleted at " + simLabel(T, x.deletedAt) + "]" : "") + ": " +
+    (x.who === "YOU" ? redact(x.text) : x.text)).join("\n");
+  const row = {
+    row_id: DATA.participant + "-" + T.position,
+    participant: DATA.participant,
+    list: DATA.list,
+    trial_pos: T.position,
+    trial_type: T.practice ? "practice" : "experimental",
+    scenario: T.scenario.id,
+    topic_type: T.scenario.topicType,
+    closeness: T.scenario.closeness,
+    receipts: T.receipts,
+    format: T.format,
+    condition: T.conditionCode,
+    nickname_used: T.usedNickname ? "y" : "n",
+    opened: t.opened ? "y" : "n",
+    open_step: blank(t.openStep),
+    open_step_label: stepLabel(t.openStep),
+    open_min_after_arrival: blank(t.openMin),
+    open_real_ms_after_arrival: blank(t.openRealMs),
+    n_waits_before_open: t.waitsBeforeOpen,
+    n_waits_after_open: t.waitsAfterOpen,
+    replied: t.replies > 0 ? "y" : "n",
+    first_reply_step: blank(t.firstReplyStep),
+    first_reply_step_label: stepLabel(t.firstReplyStep),
+    first_reply_min_after_arrival: blank(t.firstReplyMin),
+    first_reply_real_ms_after_open: blank(t.firstReplyRealMs),
+    n_reply_msgs: t.replies,
+    reply_chars: t.replyChars,
+    reply_words: t.replyWords,
+    mean_chars_per_msg: t.replies ? Math.round(t.replyChars / t.replies * 10) / 10 : "",
+    n_deleted: t.deletes,
+    first_keystroke_ms_after_open: t.firstKeyReal != null ? t.firstKeyReal - T.openReal : "",
+    typing_time_ms: t.firstKeyReal != null && t.lastSendReal != null ? t.lastSendReal - t.firstKeyReal : "",
+    n_erase_events: t.erasures,
+    erased_chars: t.erasedChars,
+    erased_text: redact(t.erasedChunks.join(" | ")),
+    unsent_text_at_end: redact(t.unsentAtEnd),
+    transcript,
+    end_reason: reason
+  };
+  for (const q of CONFIG.ratings) row["rating_" + q.id] = blank(ratings[q.id]);
+  row.receipt_check = blank(ratings.receipt_check);
+  row.trial_duration_ms = Date.now() - T.t0;
+  row.status = reason === "test_skip" ? "skipped_in_test" : "complete";
+  return row;
+}
+
+// Row for a chat that was cut off by a reload or closed page.
+function interruptedRow(position, spec) {
+  return {
+    row_id: DATA.participant + "-" + position,
+    participant: DATA.participant,
+    list: DATA.list,
+    trial_pos: position,
+    trial_type: "experimental",
+    scenario: spec.id,
+    closeness: (CONFIG.scenarios.find(s => s.id === spec.id) || {}).closeness || "",
+    receipts: spec.receipts,
+    format: spec.format,
+    condition: "RR_" + spec.receipts.toUpperCase() + "_" + spec.format.toUpperCase(),
+    status: "interrupted"
+  };
+}
+
+/* ======================= after the chats ======================= */
+function endQuestionsScreen() {
+  return new Promise(resolve => {
+    const E = CONFIG.endQuestions;
+    const a = {};
+    const btn = h("button", { class: "btn", type: "button", disabled: true }, E.button);
+    const refresh = () => { btn.disabled = !(a.year && a.app && a.ownReceipts && a.realism != null); };
+    const guess = h("textarea", { class: "text-input", id: "guess", placeholder: E.guess.placeholder, autocapitalize: "sentences" });
+    btn.addEventListener("click", () => { a.guess = redact(guess.value.trim()); resolve(a); });
+    show(page(null,
+      h("h1", null, E.title),
+      question(E.year.question, id => choiceGroup(id, E.year.options, v => { a.year = v; refresh(); })),
+      question(E.app.question, id => choiceGroup(id, E.app.options, v => { a.app = v; refresh(); })),
+      question(E.ownReceipts.question, id => choiceGroup(id, E.ownReceipts.options, v => { a.ownReceipts = v; refresh(); })),
+      h("div", { class: "q" }, h("label", { class: "q-label", for: "guess" }, E.guess.question), guess),
+      question(E.realism.question, id => makeSlider(id, E.realism.left, E.realism.right, v => { a.realism = v; refresh(); })),
+      btn));
+    App.skip = () => { a.guess = redact(guess.value.trim()); resolve(a); };
+  });
+}
+
+// One row per person in the Participants tab. It is updated (not duplicated)
+// each time it's sent: status goes started → in_progress → complete.
+function participantRow(status, endAnswers) {
+  const e = endAnswers || {};
+  return {
+    participant: DATA.participant,
+    test: TEST ? "y" : "n",
+    status,
+    list: DATA.list,
+    list_source: DATA.listSource,
+    order: DATA.order,
+    started_at: new Date(DATA.startedAt).toISOString(),
+    last_update: new Date().toISOString(),
+    consent: DATA.answers.consent || "",
+    nickname_close: DATA.nicknameUsed.close,
+    nickname_acquaintance: DATA.nicknameUsed.acquaintance,
+    nickname_new: DATA.nicknameUsed.new,
+    n_chats_done: STATE ? STATE.chatsDone : 0,
+    n_resumes: STATE ? STATE.resumes : 0,
+    year: e.year || "",
+    main_app: e.app || "",
+    own_read_receipts: e.ownReceipts || "",
+    study_guess: e.guess || "",
+    realism: e.realism != null ? e.realism : "",
+    total_duration_ms: Date.now() - DATA.startedAt,
+    device: COARSE_POINTER ? "touch" : "mouse",
+    dark_mode: matchMedia("(prefers-color-scheme: dark)").matches ? "y" : "n"
+  };
+}
+const orderString = plan => plan.map(p => p.id + ":" + p.receipts + "_" + p.format).join(" > ");
+
+// "Saving… / saved / not saved yet" line, kept up to date.
+function saveStatusLine() {
+  const D = CONFIG.debrief;
+  const line = h("p", { class: "note", role: "status" });
+  const retry = h("button", { class: "btn secondary", type: "button", hidden: true, onclick() { failures = 0; flushOutbox(); } }, D.retry);
+  const render = s => {
+    line.textContent = s === "test" ? "Test mode: nothing was sent to the Google Sheet." :
+      s === "saved" ? D.saved : s === "failed" ? D.notSaved : D.saving;
+    retry.hidden = s !== "failed";
+  };
+  saveListeners = [render];
+  render(saveStatus());
+  return [line, retry];
+}
+function codeBox() {
+  const D = CONFIG.debrief;
+  const code = h("span", { class: "code" }, DATA.participant);
+  const copyBtn = h("button", { class: "btn secondary", type: "button" }, D.copy);
+  copyBtn.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(DATA.participant); copyBtn.textContent = D.copied; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  });
+  return h("div", { class: "q" }, h("div", { class: "field-label" }, D.codeLabel), h("div", { class: "code-box" }, code, copyBtn));
+}
+
+function debriefScreen() {
+  const D = CONFIG.debrief;
+  setTestInfo("finished");
+  show(page(null,
+    h("h1", null, D.title),
+    ...saveStatusLine(),
+    h("div", { class: "prose" }, D.paragraphs.map(p => h("p", null, p))),
+    codeBox(),
+    h("p", { class: "muted small" }, D.codeHelp),
+    TEST ? h("button", { class: "btn", type: "button", onclick: showDataView }, "Test mode: view recorded data") : null));
+}
+
+function alreadyDoneScreen() {
+  const A = CONFIG.alreadyDone;
+  setTestInfo("already done on this device (Reset to start again)");
+  show(page({ centered: true }, h("h1", null, A.title), h("p", null, A.text), ...saveStatusLine(), codeBox()));
+}
+
+/* ======================= test mode: data view ======================= */
+function table(rows, wrapCols) {
+  if (!rows.length) return h("p", { class: "muted" }, "Nothing recorded.");
+  const cols = Object.keys(rows[0]);
+  return h("div", { class: "table-wrap" }, h("table", null,
+    h("thead", null, h("tr", null, cols.map(c => h("th", null, c)))),
+    h("tbody", null, rows.map(r => h("tr", null, cols.map(c => h("td", { class: wrapCols.includes(c) ? "wrap" : null }, String(r[c]))))))));
+}
+function showDataView() {
+  const p = DATA.participantRow || participantRow("in_progress");
+  show(page(null,
+    h("p", { class: "eyebrow" }, "Test mode"),
+    h("h1", null, "What this session recorded"),
+    h("p", { class: "muted" }, "In the real study these three tables become the three tabs of your Google Sheet. Tables scroll sideways. " +
+      (TEST_SEND ? "This test run was also sent to the TEST_ tabs of your Sheet." : "This test run was not sent anywhere.")),
+    h("h2", null, "Saves (" + SENT_LOG.length + " done, " + OUTBOX.length + " waiting)"),
+    table(SENT_LOG.map(b => ({ batch: b.batchId, status: b.status,
+      rows: Object.entries(b.tables).map(([k, v]) => k + ": " + v.length).join(", ") })), []),
+    h("h2", null, "Participants (one row per person)"),
+    h("div", { class: "table-wrap" }, h("table", null, h("tbody", null,
+      Object.entries(p).map(([k, v]) => h("tr", null, h("th", null, k), h("td", null, String(v))))))),
+    h("h2", null, "Trials (one row per chat)"),
+    table(DATA.trials, ["transcript", "erased_text"]),
+    h("h2", null, "Events (" + DATA.events.length + ")"),
+    table(DATA.events.map(e => ({ trial_pos: e.trial_pos, t_trial_ms: e.t_trial_ms, where: e.where, step: e.step, sim_time: e.sim_time,
+      event: e.event, msg_id: e.msg_id, text: e.text, len: e.len, latency_ms: e.latency_ms, value: e.value, note: e.note })), ["text", "note"]),
+    h("button", { class: "btn secondary", type: "button", onclick: debriefScreen }, "Back")));
+}
+
+function errorScreen(problems) {
+  show(page(null,
+    h("h1", null, "The study settings have a problem"),
+    h("p", null, "Fix these in the settings block at the top of index.html, then reload:"),
+    h("div", { class: "prose" }, problems.map(p => h("p", { class: "note" }, p)))));
+}
+
+/* ======================= the whole session ======================= */
+// What gets saved, and when:
+//  • eligible + consented        → Participants row (status "started")
+//  • practice done, list chosen  → practice chat + Participants row ("in_progress")
+//  • after every chat            → that chat's summary row + its events + Participants row
+//  • end questions answered      → Participants row ("complete")
+async function main() {
+  const problems = checkConfig();
+  if (!TEST && !ENDPOINT_SET) problems.push("The study isn't connected to your Google Sheet yet. Paste the web app URL into the settings block (data → endpoint).");
+  if (TEST_SEND && !ENDPOINT_SET) problems.push("Test mode with sending is on, but there is no web app URL in the settings (data → endpoint).");
+  if (problems.length) { errorScreen(problems); return; }
+
+  flushOutbox();                          // send anything left over from an earlier visit
+  const saved = loadStore(STORE_KEY, null);
+  if (saved && saved.stage === "done") { STATE = saved; DATA.participant = saved.participant; alreadyDoneScreen(); return; }
+  if (saved && saved.participant) await resumeSession(saved);
+  else await newSession();
+}
+
+async function newSession() {
+  setTestInfo("consent");
+  await consentScreen();
+  setTestInfo("eligibility");
+  if (!(await eligibilityScreen())) { ineligibleScreen(); return; }
+  STATE = {
+    participant: DATA.participant, startedAt: DATA.startedAt,
+    consent: DATA.answers.consent, consentAt: DATA.answers.consent_at,
+    stage: "setup", list: "", listSource: "", plan: null,
+    next: 0, inProgress: null, chatsDone: 0, resumes: 0,
+    nicknameUsed: DATA.nicknameUsed, currentEvents: []
+  };
+  saveState();
+  queueBatch({ Participants: [participantRow("started")] });
+  await setupPhase();
+  await chatsPhase();
+  await endPhase();
+}
+
+// Someone reloaded or reopened the page part-way through.
+async function resumeSession(saved) {
+  STATE = saved;
+  STATE.resumes = (STATE.resumes || 0) + 1;
+  DATA.participant = STATE.participant;
+  DATA.startedAt = STATE.startedAt;
+  DATA.answers.consent = STATE.consent;
+  DATA.answers.consent_at = STATE.consentAt;
+  DATA.nicknameUsed = Object.assign({}, DATA.nicknameUsed, STATE.nicknameUsed);
+  DATA.list = STATE.list || "";
+  DATA.listSource = STATE.listSource || "";
+  DATA.order = STATE.plan ? orderString(STATE.plan) : "";
+
+  // A chat that was cut off is saved as "interrupted" (with whatever was logged) and skipped.
+  let skipped = false;
+  if (STATE.stage === "chats" && STATE.inProgress != null) {
+    const pos = STATE.inProgress;
+    queueBatch({ Trials: [interruptedRow(pos, STATE.plan[pos - 1])], Events: STATE.currentEvents || [],
+      Participants: [participantRow("in_progress")] });
+    STATE.next = pos;
+    STATE.inProgress = null;
+    STATE.currentEvents = [];
+    skipped = true;
+  }
+  saveState();
+  setTestInfo("welcome back");
+  await resumeScreen(skipped);
+
+  if (STATE.stage === "setup") {
+    await setupPhase();
+    await chatsPhase();
+    await endPhase();
+  } else if (STATE.stage === "chats") {
+    if (CONFIG.askForNicknames && LEVELS.some(l => DATA.nicknameUsed[l] === "y")) { setTestInfo("nicknames again"); await nicknameScreen(true); }
+    await chatsPhase();
+    await endPhase();
+  } else {
+    await endPhase();
+  }
+}
+
+async function setupPhase() {
+  if (CONFIG.askForNicknames) {
+    setTestInfo("nicknames");
+    await nicknameScreen(false);
+    STATE.nicknameUsed = DATA.nicknameUsed;
+    saveState();
+  }
+  setTestInfo("instructions");
+  await instructionsScreen();
+  const practice = await runTrial(practiceSpec());
+
+  setTestInfo("practice done");
+  const listPromise = requestList();
+  await practiceDoneScreen(listPromise);
+  const { list, source } = await listPromise;
+  const plan = buildPlan(list);
+  DATA.list = list;
+  DATA.listSource = source;
+  STATE.plan = plan.map(s => ({ id: s.scenario.id, receipts: s.receipts, format: s.format }));
+  DATA.order = orderString(STATE.plan);
+  Object.assign(STATE, { list, listSource: source, stage: "chats", next: 0 });
+  saveState();
+  queueBatch({ Trials: [practice.row], Events: practice.events, Participants: [participantRow("in_progress")] });
+}
+
+async function chatsPhase() {
+  const plan = STATE.plan.map(p => ({ scenario: CONFIG.scenarios.find(s => s.id === p.id), receipts: p.receipts, format: p.format }));
+  if (plan.some(p => !p.scenario)) throw new Error("A scenario id in this participant's plan is missing from the settings. Don't change scenario ids while the study is running.");
+  for (let i = STATE.next; i < plan.length; i++) {
+    const s = plan[i];
+    const nick = NICKNAMES[s.scenario.closeness];
+    STATE.inProgress = i + 1;
+    STATE.currentEvents = [];
+    saveState();
+    const { row, events } = await runTrial(Object.assign({}, s, {
+      position: i + 1,
+      positionLabel: fill(CONFIG.labels.chatOf, { n: i + 1, total: plan.length }),
+      contactName: nick || s.scenario.contactName,
+      usedNickname: !!nick
+    }));
+    STATE.chatsDone++;
+    STATE.inProgress = null;
+    STATE.next = i + 1;
+    STATE.currentEvents = [];
+    queueBatch({ Trials: [row], Events: events, Participants: [participantRow("in_progress")] });
+    saveState();
+  }
+  STATE.stage = "end";
+  saveState();
+}
+
+async function endPhase() {
+  setTestInfo("end questions");
+  const end = await endQuestionsScreen();
+  DATA.participantRow = participantRow("complete", end);
+  STATE.stage = "done";
+  STATE.currentEvents = [];
+  queueBatch({ Participants: [DATA.participantRow] });
+  saveState();
+  debriefScreen();
+}
+
+main().catch(err => {
+  console.error(err);
+  errorScreen(["Something went wrong: " + (err && err.message ? err.message : err)]);
+});
+</script>
+</body>
+</html>
